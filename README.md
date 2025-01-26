@@ -1,88 +1,47 @@
-# CRUD
-delete
-[20/01, 12:45 am] Koyal🎀🎀: public ResponseModel ExecuteDelete(int clientId)
-{
-    ResponseModel response = new ResponseModel();
+$(document).ready(function () {
+    var deleteClientId = 0;
 
-    try
-    {
-        using (SqlConnection conn = new SqlConnection(_connectionString))
-        {
-            conn.Open();
+    // When the modal is triggered
+    $('#deleteModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget); // Button that triggered the modal
+        deleteClientId = button.data('clientid'); // Extract client ID
+        var clientName = button.data('clientname'); // Extract client name
 
-            using (SqlTransaction transaction = conn.BeginTransaction())
-            {
-                using (SqlCommand cmd = new SqlCommand("SP_delete_Master", conn, transaction))
-                {
-                    cmd.CommandType = CommandType.StoredProcedure;
+        // Update the modal content
+        $('#clientName').text(clientName);
+    });
 
-                    // Input parameter
-                    cmd.Parameters.AddWithValue("@ClientID", clientId);
-
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        if (reader.HasRows)
-                        {
-                            while (reader.Read())
-                            {
-                                // Treat both StatusCode and StatusMessage as strings
-                                response.StatusCode = reader["StatusCode"].ToString();
-                                response.StatusMessage = reader["StatusMessage"].ToString();
-                            }
-                        }
-                    }
+    // Confirm delete button click
+    $('#confirmDelete').on('click', function () {
+        $.ajax({
+            url: '/ControllerName/DeleteClientMasterTODB', // Update with your controller's name
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ clientId: deleteClientId }),
+            success: function (response) {
+                if (response.success) {
+                    alert(response.message || 'Client deleted successfully!');
+                    location.reload(); // Refresh the page
+                } else {
+                    alert(response.message || 'Error deleting client.');
                 }
-
-                // Commit transaction
-                transaction.Commit();
+            },
+            error: function (xhr, status, error) {
+                console.error('Error:', error);
+                alert('An unexpected error occurred.');
             }
-        }
-    }
-    catch (Exception ex)
-    {
-        // In case of an error, return a failure response
-        response.StatusCode = "500";  // Return as string
-        response.StatusMessage = $"Transaction failed: {ex.Message}";
-    }
+        });
 
-    return response;
-}
-[20/01, 1:10 am] Koyal🎀🎀: [HttpPost]
-public ActionResult DeleteClientmasterTODB(int clientId)
-{
-    clsmasterdelete deleteOperation = new clsmasterdelete();
+        // Close the modal
+        $('#deleteModal').modal('hide');
+    });
+});
 
-    // Execute delete operation and get the response
-    ResponseModel response = deleteOperation.ExecuteDelete(clientId);
+-------------------------------------------------------------------
 
-    // Set ViewBag message
-    if (response.StatusCode == "200") // Assuming "200" indicates success
-    {
-        ViewBag.Message = response.StatusMessage;
-        ViewBag.MessageType = "success";
-    }
-    else
-    {
-        ViewBag.Message = response.StatusMessage;
-        ViewBag.MessageType = "error";
-    }
+@model IEnumerable<dynamic>
 
-    // Return the updated view with the message
-    var model = GetClientList(); // Replace with your method to fetch the updated client list
-    return View("Index", model);
-}
-[20/01, 1:10 am] Koyal🎀🎀: @model IEnumerable<dynamic>
-
-<div>
-    @if (ViewBag.Message != null)
-    {
-        <div class="alert @(ViewBag.MessageType == "success" ? "alert-success" : "alert-danger")">
-            @ViewBag.Message
-        </div>
-    }
-</div>
-
-<table class="table table-bordered">
+<table class="table">
     <thead>
         <tr>
             <th>ClientID</th>
@@ -105,122 +64,65 @@ public ActionResult DeleteClientmasterTODB(int clientId)
                 <td>@client.City</td>
                 <td>@client.Phone</td>
                 <td>
-                    <form action="@Url.Action("DeleteClientmasterTODB", "YourControllerName")" method="post" style="display:inline;">
-                        <input type="hidden" name="clientId" value="@client.ClientID" />
-                        <button type="submit" class="btn btn-danger">Delete</button>
-                    </form>
+                    <!-- Trigger Delete Modal -->
+                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal"
+                        data-clientid="@client.ClientID" data-clientname="@client.FirstName @client.LastName">
+                        Delete
+                    </button>
                 </td>
             </tr>
         }
     </tbody>
 </table>
 
-_____________________
-edit
+<!-- Include the Delete Modal Partial -->
+@Html.Partial("_DeleteModal")
 
-using System.Data;
-using System.Data.SqlClient;
-using System.Configuration;
+<!-- Include External JS -->
+<script src="~/js/deleteClient.js"></script>
 
-public class clsmasteredit
+------------------------------------------------------------------------------
+
+[HttpPost]
+public JsonResult DeleteClientMasterTODB(int clientId)
 {
-    private string _connectionString;
-
-    public clsmasteredit()
+    try
     {
-        _connectionString = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+        clsmasterdelete deleteOperation = new clsmasterdelete();
+        var response = deleteOperation.ExecuteDelete(clientId);
+
+        if (response.StatusCode == 1) // Assuming 1 means success
+        {
+            return Json(new { success = true, message = response.StatusMessage });
+        }
+        else
+        {
+            return Json(new { success = false, message = response.StatusMessage });
+        }
     }
-
-    // Method to fetch client details by ClientID
-    public dynamic GetClientById(int clientId)
+    catch (Exception ex)
     {
-        dynamic client = null;
-        SqlConnection conn = new SqlConnection(_connectionString); // Initialize the connection explicitly
-
-        try
-        {
-            SqlCommand cmd = new SqlCommand("SP_GET_CLIENTDETAILS", conn); // Create a stored procedure for fetching client details
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Parameters.AddWithValue("@ClientID", clientId);
-
-            conn.Open(); // Explicitly open the connection
-            SqlDataReader reader = cmd.ExecuteReader();
-
-            if (reader.HasRows) // Check if there are any rows returned
-            {
-                while (reader.Read()) // Loop through the rows
-                {
-                    client = new
-                    {
-                        ClientID = Convert.ToInt32(reader["ClientID"]),
-                        FirstName = reader["FirstName"].ToString(),
-                        LastName = reader["LastName"].ToString(),
-                        Country = reader["Country"].ToString(),
-                        City = reader["City"].ToString(),
-                        Phone = reader["Phone"].ToString()
-                    };
-                }
-            }
-
-            reader.Close(); // Explicitly close the reader
-        }
-        catch (Exception ex)
-        {
-            throw new Exception("An error occurred while fetching the client details.", ex);
-        }
-        finally
-        {
-            conn.Close(); // Explicitly close the connection
-            conn.Dispose(); // Explicitly release the connection resource
-        }
-
-        return client;
-    }
-
-    // Method to update client details
-    public int ExecuteEdit(int clientId, string firstName, string lastName, string country, string city, string phone)
-    {
-        int statusCode = 0;
-        SqlConnection conn = new SqlConnection(_connectionString); // Initialize the connection explicitly
-
-        try
-        {
-            SqlCommand cmd = new SqlCommand("SP_EDIT_CLIENTMASTER", conn);
-            cmd.CommandType = CommandType.StoredProcedure;
-
-            // Input parameters
-            cmd.Parameters.AddWithValue("@ClientID", clientId);
-            cmd.Parameters.AddWithValue("@FirstName", firstName);
-            cmd.Parameters.AddWithValue("@LastName", lastName);
-            cmd.Parameters.AddWithValue("@Country", country);
-            cmd.Parameters.AddWithValue("@City", city);
-            cmd.Parameters.AddWithValue("@Phone", phone);
-
-            conn.Open(); // Explicitly open the connection
-
-            // Execute the stored procedure and return the number of rows affected
-            int rowsAffected = cmd.ExecuteNonQuery();
-
-            // You can handle the rowsAffected if needed or check your SP for status code
-            if (rowsAffected > 0)
-            {
-                statusCode = 1; // Assuming 1 indicates success
-            }
-            else
-            {
-                statusCode = 0; // Failure case
-            }
-        }
-        catch (Exception ex)
-        {
-            throw new Exception("An error occurred while updating the client details.", ex);
-        }
-        finally
-        {
-            conn.Close(); // Explicitly close the connection
-            conn.Dispose(); // Explicitly release the connection resource
-        }
-
-        return statusCode;
+        return Json(new { success = false, message = "An error occurred while deleting the client: " + ex.Message });
     }
 }
+
+----------------------------------------------------------------------------------------------
+modal
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete <strong id="clientName"></strong>?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+d
